@@ -8,7 +8,6 @@ from sensor_msgs.msg import Image, CameraInfo
 import matplotlib.pyplot as plt
 from skimage.morphology import medial_axis
 import pyrealsense2 as rs2
-from pyrealsense2 import pipeline_profile as Profile
 
 depth_image_topic = "/camera/depth/image_rect_raw"
 depth_info_topic = "/camera/depth/camera_info"
@@ -37,26 +36,21 @@ camera_intrinsics = None
 camera_info = rospy.wait_for_message(depth_info_topic, CameraInfo)
 camera_intrinsics = depthInfoCB(camera_intrinsics, camera_info)
 
-profile = Profile()
-print(profile.get_device())
-depth_scale = profile.get_device().first_depth_sensor().get_depth_scale()
-depth_min = 0.11 #meter
-depth_max = 1.0 #meter
-
-# rs2.rs2_project_color_pixel_to_depth_pixel([])
 depth_image = rospy.wait_for_message(depth_image_topic, Image)
 bridge = CvBridge()
 depth_image = bridge.imgmsg_to_cv2(depth_image, desired_encoding="passthrough")
-print(depth_image.shape)
+print(depth_image)
 depth_point = [depth_image[0][1], depth_image[0][0]]
 print(depth_point)
 
 img = rospy.wait_for_message('/camera/color/image_raw', Image)
+img2 = rospy.wait_for_message('/camera/aligned_depth_to_color/image_raw', Image)
 bridge = CvBridge()
 cv_image = bridge.imgmsg_to_cv2(img, desired_encoding='passthrough')
+img2 = bridge.imgmsg_to_cv2(img2, desired_encoding='passthrough')
 
 img = cv_image
-
+print(img.shape)
 def process(img):
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(img_gray, 163, 255, cv2.THRESH_BINARY)
@@ -213,24 +207,16 @@ cordinates = sort_by_nearest(cordinates)
 cordinates = np.array(cordinates)
 # print(original_img.shape, color_img.shape)
 cordinates[:,0] += y_shift
-#cordinates[:,0] -= w_shift
+
 cordinates[:,1] += x_shift
-#cordinates[:,1] -= h_shift
 
-# old_width = original_img.shape[1]
-# old_height = original_img.shape[0]
-# new_width = color_img.shape[1]
-# new_height = color_img.shape[0]
-# scale_x = old_width/new_width
-# scale_y = old_height/new_height
+# is this th depth in meters? It seems like yes
+print("im2", img2[cordinates[0][1], cordinates[0][0]]/1000)
 
-# print('scale:', scale_x, scale_y)
-
-# cordinates = [[int(x/scale_x), int(y/scale_y)] for x,y in cordinates]
 # # print(bbox_coords)
 # # print(cordinates[:,0])
 # for cor in cordinates:
 #     #canvas = cv2.circle(color_img, (cor[1], cor[0]), 1, (0,0,255), -1)
-#     canvas = cv2.circle(original_img, (cor[1], cor[0]), 1, (0,0,255), -1)
+#     canvas = cv2.circle(img2, (cor[1], cor[0]), 1, (0,0,255), -1)
 #     cv2.imshow('canvas', canvas)
 #     cv2.waitKey(50)

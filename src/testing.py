@@ -215,8 +215,8 @@ print("im2", img2[cordinates[0][1], cordinates[0][0]]/1000)
 
 # # print(bbox_coords)
 # # print(cordinates[:,0])
-# for cor in cordinates:
-#     #canvas = cv2.circle(color_img, (cor[1], cor[0]), 1, (0,0,255), -1)
-#     canvas = cv2.circle(img2, (cor[1], cor[0]), 1, (0,0,255), -1)
-#     cv2.imshow('canvas', canvas)
-#     cv2.waitKey(50)
+for cor in cordinates:
+    #canvas = cv2.circle(color_img, (cor[1], cor[0]), 1, (0,0,255), -1)
+    canvas = cv2.circle(original_img, (cor[1], cor[0]), 1, (0,0,255), -1)
+    cv2.imshow('canvas', canvas)
+    cv2.waitKey(50)

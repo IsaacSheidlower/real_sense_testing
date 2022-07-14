@@ -4,12 +4,53 @@ import rospy
 import cv2
 import numpy as np
 from cv_bridge import CvBridge
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, CameraInfo
 import matplotlib.pyplot as plt
 from skimage.morphology import medial_axis
+import pyrealsense2 as rs2
+from pyrealsense2 import pipeline_profile as Profile
+
+depth_image_topic = "/camera/depth/image_rect_raw"
+depth_info_topic = "/camera/depth/camera_info"
+
+def depthInfoCB(camera_intrinsics, camerainfo):
+        if camera_intrinsics:
+            pass
+        else:
+            camera_intrinsics = rs2.intrinsics()
+            camera_intrinsics.width = camerainfo.width
+            camera_intrinsics.height = camerainfo.height
+            camera_intrinsics.ppx = camerainfo.K[2]
+            camera_intrinsics.ppy = camerainfo.K[5]
+            camera_intrinsics.fx = camerainfo.K[0]
+            camera_intrinsics.fy = camerainfo.K[4]
+            if (camerainfo.distortion_model == "plumb_bob"):
+                camera_intrinsics.model = rs2.distortion.brown_conrady
+            elif (camerainfo.distortion_model == "equidistant"):
+                camera_intrinsics.model = rs2.distortion.kannala_brandt4
+            camera_intrinsics.coeffs = [i for i in camerainfo.D]
+            return camera_intrinsics
 
 
 rospy.init_node("cam_testing")
+camera_intrinsics = None
+camera_info = rospy.wait_for_message(depth_info_topic, CameraInfo)
+camera_intrinsics = depthInfoCB(camera_intrinsics, camera_info)
+
+profile = Profile()
+print(profile.get_device())
+depth_scale = profile.get_device().first_depth_sensor().get_depth_scale()
+depth_min = 0.11 #meter
+depth_max = 1.0 #meter
+
+# rs2.rs2_project_color_pixel_to_depth_pixel([])
+depth_image = rospy.wait_for_message(depth_image_topic, Image)
+bridge = CvBridge()
+depth_image = bridge.imgmsg_to_cv2(depth_image, desired_encoding="passthrough")
+print(depth_image.shape)
+depth_point = [depth_image[0][1], depth_image[0][0]]
+print(depth_point)
+
 img = rospy.wait_for_message('/camera/color/image_raw', Image)
 bridge = CvBridge()
 cv_image = bridge.imgmsg_to_cv2(img, desired_encoding='passthrough')
@@ -38,86 +79,18 @@ def get_contours(img):
     return new_img, x, y, w, h
 
 
-rect_img, x,y,w,h = get_contours(img)
+rect_img, x_shift,y_shift,w_shift,h_shift = get_contours(img)
+
+
+original_img = img.copy()
+# cv2.imshow('img', original_img[x_shift:y_shift+h_shift,x_shift:x_shift+w_shift])
 # cv2.imshow("img_processed", rect_img)
 # cv2.waitKey(0)
 
 img = rect_img
 img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 print(img.size)
-# #converted = convert_hls(img)
-# image = cv2.cvtColor(img,cv2.COLOR_BGR2HLS)
-# lower_black = np.array([0, 0, 0])
-# upper_black = np.array([350,55,100])
-# black_mask = cv2.inRange(image, lower_black, upper_black)
-# # yellow color mask
-# lower = np.uint8([0, 200, 0])
-# upper = np.uint8([255, 255, 255])
-# white_mask = cv2.inRange(image, lower, upper)
-# # combine the mask
-# mask = cv2.bitwise_or(white_mask, black_mask)
-# result = img.copy()
-# # cv2.imshow("mask",mask) 
-# # cv2.waitKey(0)
 
-# height,width = mask.shape
-# skel = np.zeros([height,width],dtype=np.uint8)      #[height,width,3]
-# kernel = cv2.getStructuringElement(cv2.MORPH_CROSS, (3,3))
-# temp_nonzero = np.count_nonzero(mask)
-# while(np.count_nonzero(mask) != 0 ):
-#     eroded = cv2.erode(mask,kernel)
-#     cv2.imshow("eroded",eroded)   
-#     temp = cv2.dilate(eroded,kernel)
-#     cv2.imshow("dilate",temp)
-#     temp = cv2.subtract(mask,temp)
-#     skel = cv2.bitwise_or(skel,temp)
-#     mask = eroded.copy()
- 
-# # cv2.imshow("skel",skel)
-# # cv2.waitKey(0)
-
-# edges = cv2.Canny(skel, 50, 150)
-# cv2.imshow("edges",edges)
-# lines = cv2.HoughLinesP(edges,1,np.pi/180,40,minLineLength=30,maxLineGap=30)
-# i = 0
-# for x1,y1,x2,y2 in lines[0]:
-#     i+=1
-#     cv2.line(result,(x1,y1),(x2,y2),(255,0,0),1)
-#     print(i)
-
-# cv2.imshow("res",result)
-# cv2.waitKey(0)
-
-"""try 2"""
-# img = rect_img
-# gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-
-# kernel_size = 5
-# blur_gray = cv2.GaussianBlur(gray,(kernel_size, kernel_size),0)
-# low_threshold = 50
-# high_threshold = 150
-# edges = cv2.Canny(blur_gray, low_threshold, high_threshold)
-
-# rho = 1  # distance resolution in pixels of the Hough grid
-# theta = np.pi / 180  # angular resolution in radians of the Hough grid
-# threshold = 15  # minimum number of votes (intersections in Hough grid cell)
-# min_line_length = 50  # minimum number of pixels making up a line
-# max_line_gap = 20  # maximum gap in pixels between connectable line segments
-# line_image = np.copy(img) * 0  # creating a blank to draw lines on
-
-# # Run Hough on edge detected image
-# # Output "lines" is an array containing endpoints of detected line segments
-# lines = cv2.HoughLinesP(edges, rho, theta, threshold, np.array([]),
-#                     min_line_length, max_line_gap)
-
-# for line in lines:
-#     for x1,y1,x2,y2 in line:
-#         cv2.line(line_image,(x1,y1),(x2,y2),(255,0,0),5)
-
-# lines_edges = cv2.addWeighted(img, 0.8, line_image, 1, 0)
-
-# cv2.imshow("lines",lines_edges)
-# cv2.waitKey(0)
 
 inputImage = img.copy()
 #inputImageGray = cv2.cvtColor(inputImage, cv2.COLOR_BGR2GRAY)
@@ -133,6 +106,7 @@ for o in range(0, len(lines)):
         pts = np.array([[x1, y1 ], [x2 , y2]], np.int32)
         cv2.polylines(inputImage, [pts], True, (0,255,0))
 
+print(inputImage.shape)
 font = cv2.FONT_HERSHEY_SIMPLEX
 # cv2.putText(inputImage,"Tracks Detected", (500, 250), font, 0.5, 255)
 # cv2.imshow("Trolley_Problem_Result", inputImage)
@@ -161,20 +135,20 @@ contours, hierarchy = cv2.findContours(dilated_img, cv2.RETR_CCOMP, cv2.CHAIN_AP
 #     else:
 #         cv2.drawContours(canvas, cont, -1, (255, 0, 0), 1) # plot all others BLUE, for completeness
 
-print(contours)
+#print(contours)
 dist2 = cv2.pointPolygonTest(contours[0], (204, 38), True)
-print(dist2)
+#print(dist2)
 # cv2.imshow('canvas', canvas)
 # cv2.waitKey(0)
 
 # img = edges.copy()
 canvas = cv2.cvtColor(canvas, cv2.COLOR_BGR2GRAY)
-print(canvas.shape, edges.shape)
+# print(canvas.shape, edges.shape)
 
 skeleton = medial_axis(canvas).astype(np.uint8)
 x_cor,y_cor = np.where(skeleton>0)
-print(x_cor,y_cor)
-print(skeleton)
+# print(x_cor,y_cor)
+# print(skeleton)
 # cv2.imshow("result", skeleton*255)
 # cv2.waitKey(0)
 
@@ -234,9 +208,29 @@ cordinates = merge(x_cor, y_cor)
 cordinates = sorted(cordinates, key=lambda k: [k[1], k[0]])
 cordinates = np.array(cordinates)
 
+
 cordinates = sort_by_nearest(cordinates)
-print(cordinates)
-for cor in cordinates:
-    canvas = cv2.circle(color_img, (cor[1], cor[0]), 1, (0,0,255), -1)
-    cv2.imshow('canvas', canvas)
-    cv2.waitKey(50)
+cordinates = np.array(cordinates)
+# print(original_img.shape, color_img.shape)
+cordinates[:,0] += y_shift
+#cordinates[:,0] -= w_shift
+cordinates[:,1] += x_shift
+#cordinates[:,1] -= h_shift
+
+# old_width = original_img.shape[1]
+# old_height = original_img.shape[0]
+# new_width = color_img.shape[1]
+# new_height = color_img.shape[0]
+# scale_x = old_width/new_width
+# scale_y = old_height/new_height
+
+# print('scale:', scale_x, scale_y)
+
+# cordinates = [[int(x/scale_x), int(y/scale_y)] for x,y in cordinates]
+# # print(bbox_coords)
+# # print(cordinates[:,0])
+# for cor in cordinates:
+#     #canvas = cv2.circle(color_img, (cor[1], cor[0]), 1, (0,0,255), -1)
+#     canvas = cv2.circle(original_img, (cor[1], cor[0]), 1, (0,0,255), -1)
+#     cv2.imshow('canvas', canvas)
+#     cv2.waitKey(50)

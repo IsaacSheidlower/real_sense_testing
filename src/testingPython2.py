@@ -8,9 +8,17 @@ from sensor_msgs.msg import Image, CameraInfo
 import matplotlib.pyplot as plt
 from skimage.morphology import medial_axis
 import pyrealsense2 as rs2
+from geometry_msgs.msg import Pose, Point, PoseStamped, Quaternion
+import tf 
+from hlpr_manipulation_utils.arm_moveit2 import ArmMoveIt
 
 depth_image_topic = "/camera/depth/image_rect_raw"
 depth_info_topic = "/camera/depth/camera_info"
+world_frame = "base_link"
+depth_frame = "camera_depth_frame"
+camera_frame = "/camera_color_optical_frame"
+arm_frame = "/j2s7s300_link_base"
+
 
 def depthInfoCB(camera_intrinsics, camerainfo):
         if camera_intrinsics:
@@ -50,7 +58,8 @@ cv_image = bridge.imgmsg_to_cv2(img, desired_encoding='passthrough')
 img2 = bridge.imgmsg_to_cv2(img2, desired_encoding='passthrough')
 
 img = cv_image
-print(img.shape)
+print("camera:" , img.shape)
+print("depth: ", img2.shape)
 def process(img):
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(img_gray, 163, 255, cv2.THRESH_BINARY)
@@ -211,12 +220,49 @@ cordinates[:,0] += y_shift
 cordinates[:,1] += x_shift
 
 # is this th depth in meters? It seems like yes
-print("im2", img2[cordinates[5][1], cordinates[5][0]]/1000)
+# print(cordinates[5])
+# print("depth_sample", img2[265,162])
+# print("cor", cordinates[50][0], cordinates[50][1])
 
+# for corr in cordinates:
+#     print(img2[corr[0], corr[1]]/1000.0)
+#     if img2[corr[0], corr[1]]/1000 == 0 or img2[corr[0], corr[1]]/1000 ==1:
+#         continue
+#     else:
+#         print(img2[corr[0], corr[1]]/1000)
+# from IPython import embed
+# embed()
 # # print(bbox_coords)
 # # print(cordinates[:,0])
 for cor in cordinates:
     #canvas = cv2.circle(color_img, (cor[1], cor[0]), 1, (0,0,255), -1)
     canvas = cv2.circle(original_img, (cor[1], cor[0]), 1, (0,0,255), -1)
     cv2.imshow('canvas', canvas)
-    cv2.waitKey(50)
+    cv2.waitKey(5)
+
+#point = rs2.rs2_deproject_pixel_to_point(camera_intrinsics, [self.center[0], self.center[1]], depth)
+
+p = Point(cordinates[50][0]/1000.0, cordinates[50][1]/1000.0, img2[cordinates[50][1],cordinates[50][0]]/1000.0)
+print(img2[cordinates[50][0], cordinates[50][1]])
+poi = PoseStamped()
+poi.pose.position = p
+poi.pose.orientation = Quaternion(0.,0.,0.,1.)
+poi.header.frame_id = camera_frame
+
+tf_listener = tf.TransformListener()
+
+q = Quaternion()
+q.x = 0 #rot[0]
+q.y = 0 #rot[1]
+q.z = 0 #rot[2]
+q.w = 1. #rot[3]
+
+tf_listener.waitForTransform(arm_frame, camera_frame, rospy.Time(), rospy.Duration(4.0))
+goal_world = tf_listener.transformPose(arm_frame, poi)
+        # plan = self.moveit.plan_ee_pos(goal_arm)
+        # self.moveit.move_through_waypoints(plan)
+goal_world.pose.orientation = q
+
+print(p)
+arm = ArmMoveIt("j2s7s300_link_base")
+arm.move_to_ee_pose(goal_world.pose)

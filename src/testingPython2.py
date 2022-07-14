@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 import rospy
 import cv2
@@ -59,7 +59,7 @@ def process(img):
     return cv2.erode(img_dilate, None, iterations=7)
 
 def get_contours(img):
-    contours, _ = cv2.findContours(process(img), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+    contours = cv2.findContours(process(img), cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)[1]
     x, y, w, h = cv2.boundingRect(max(contours, key=cv2.contourArea))
     cv2.imwrite('img_new.jpg', img[y:y+h,x:x+w])
 
@@ -116,7 +116,7 @@ canvas = dilated_img.copy() # Canvas for plotting contours on
 print(canvas.size)
 canvas = cv2.cvtColor(canvas, cv2.COLOR_GRAY2RGB) # create 3 channel image so we can plot contours in color
 
-contours, hierarchy = cv2.findContours(dilated_img, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
+contours = cv2.findContours(dilated_img, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)[1]
 
 # loop through the contours and check through their hierarchy, if they are inner contours
 # more here: https://docs.opencv.org/master/d9/d8b/tutorial_py_contours_hierarchy.html
@@ -211,7 +211,7 @@ cordinates[:,0] += y_shift
 cordinates[:,1] += x_shift
 
 # is this th depth in meters? It seems like yes
-print("im2", img2[cordinates[0][1], cordinates[0][0]]/1000)
+print("im2", img2[cordinates[5][1], cordinates[5][0]]/1000)
 
 # # print(bbox_coords)
 # # print(cordinates[:,0])

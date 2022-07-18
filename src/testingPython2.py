@@ -18,6 +18,7 @@ world_frame = "base_link"
 depth_frame = "camera_depth_frame"
 camera_frame = "/camera_color_optical_frame"
 arm_frame = "/j2s7s300_link_base"
+eef_frame = "/j2s7s300_ee_link"
 
 
 def depthInfoCB(camera_intrinsics, camerainfo):
@@ -47,9 +48,9 @@ camera_intrinsics = depthInfoCB(camera_intrinsics, camera_info)
 depth_image = rospy.wait_for_message(depth_image_topic, Image)
 bridge = CvBridge()
 depth_image = bridge.imgmsg_to_cv2(depth_image, desired_encoding="passthrough")
-print(depth_image)
-depth_point = [depth_image[0][1], depth_image[0][0]]
-print(depth_point)
+# print(depth_image)
+# depth_point = [depth_image[0][1], depth_image[0][0]]
+# print(depth_point)
 
 img = rospy.wait_for_message('/camera/color/image_raw', Image)
 img2 = rospy.wait_for_message('/camera/aligned_depth_to_color/image_raw', Image)
@@ -98,6 +99,10 @@ print(img.size)
 inputImage = img.copy()
 #inputImageGray = cv2.cvtColor(inputImage, cv2.COLOR_BGR2GRAY)
 print(inputImage.shape)
+ksize = (1, 1)
+  
+# Using cv2.blur() method 
+inputImage = cv2.blur(inputImage, ksize) 
 edges = cv2.Canny(inputImage,150,200,apertureSize = 3)
 print(edges.shape)
 minLineLength = 30
@@ -118,7 +123,7 @@ font = cv2.FONT_HERSHEY_SIMPLEX
 # cv2.waitKey(0)
 # print(edges)
 
-kernel = np.ones((3,3),np.uint8)
+kernel = np.ones((2,2),np.uint8)
 dilated_img = cv2.dilate(edges, kernel, iterations = 2)
 
 canvas = dilated_img.copy() # Canvas for plotting contours on
@@ -219,6 +224,14 @@ cordinates[:,0] += y_shift
 
 cordinates[:,1] += x_shift
 
+mean, stdev = np.mean(cordinates, axis=0), np.std(cordinates, axis=0)
+# Mean: [811.2  76.4  88. ]
+# Std: [152.97764543   6.85857128  29.04479299]
+## Find Outliers
+outliers = ((np.abs(cordinates[:,0] - mean[0]) < 2*stdev[0])
+            * (np.abs(cordinates[:,1] - mean[1]) < 2*stdev[1]))
+
+cordinates = cordinates[outliers]
 # is this th depth in meters? It seems like yes
 # print(cordinates[5])
 # print("depth_sample", img2[265,162])
@@ -233,36 +246,87 @@ cordinates[:,1] += x_shift
 # from IPython import embed
 # embed()
 # # print(bbox_coords)
-# # print(cordinates[:,0])
+# print(cordinates[:,0])
 for cor in cordinates:
     #canvas = cv2.circle(color_img, (cor[1], cor[0]), 1, (0,0,255), -1)
     canvas = cv2.circle(original_img, (cor[1], cor[0]), 1, (0,0,255), -1)
     cv2.imshow('canvas', canvas)
     cv2.waitKey(5)
 
-#point = rs2.rs2_deproject_pixel_to_point(camera_intrinsics, [self.center[0], self.center[1]], depth)
+p = rs2.rs2_deproject_pixel_to_point(camera_intrinsics, [cordinates[0][0], cordinates[0][1]], img2[cordinates[0][1],cordinates[0][0]])
 
-p = Point(cordinates[50][0]/1000.0, cordinates[50][1]/1000.0, img2[cordinates[50][1],cordinates[50][0]]/1000.0)
-print(img2[cordinates[50][0], cordinates[50][1]])
+#p = Point(cordinates[50][0]/1000.0, cordinates[50][1]/1000.0, img2[cordinates[50][1],cordinates[50][0]]/1000.0)
+
+p = [entry / 1000.0 for entry in p]
+print("POINT, ", p)
+
 poi = PoseStamped()
-poi.pose.position = p
+poi.pose.position.x = p[0]
+poi.pose.position.y = p[1]
+poi.pose.position.z = p[2]
 poi.pose.orientation = Quaternion(0.,0.,0.,1.)
 poi.header.frame_id = camera_frame
 
 tf_listener = tf.TransformListener()
+"""
+    x: 0.650393009186
+    y: 0.314593672752
+    z: 0.42180532217
+    w: 0.547813892365
 
-q = Quaternion()
-q.x = 0 #rot[0]
-q.y = 0 #rot[1]
-q.z = 0 #rot[2]
-q.w = 1. #rot[3]
+    x: 0.224111557007
+    y: -0.544560670853
+    z: 0.0815567523241
+  orientation: 
+    x: 0.536402761936
+    y: 0.483809828758
+    z: 0.25174665451
+    w: 0.644068241119
 
-tf_listener.waitForTransform(arm_frame, camera_frame, rospy.Time(), rospy.Duration(4.0))
-goal_world = tf_listener.transformPose(arm_frame, poi)
-        # plan = self.moveit.plan_ee_pos(goal_arm)
-        # self.moveit.move_through_waypoints(plan)
-goal_world.pose.orientation = q
+  position: 
+    x: 0.210650160909
+    y: -0.265275985003
+    z: 0.503405988216
+  orientation: 
+    x: 0.649025440216
+    y: 0.315696060658
+    z: 0.423214763403
+    w: 0.547714471817
+"""
+# q = Quaternion()
+# q.x = 0.53640#rot[0]
+# q.y = 0.4838 #rot[1]
+# q.z = 0.2517#rot[2]
+# q.w = 0.6440#rot[3]
+# # q = Quaternion()
+# # q.x = 0.#rot[0]
+# # q.y = 0.#rot[1]
+# # q.z = 0. #rot[2]
+# # q.w = 1.0#rot[3]
 
-print(p)
-arm = ArmMoveIt("j2s7s300_link_base")
-arm.move_to_ee_pose(goal_world.pose)
+# print(poi)
+# tf_listener.waitForTransform(arm_frame, camera_frame, rospy.Time(), rospy.Duration(4.0))
+# goal_world = tf_listener.transformPose(arm_frame, poi)
+#         # plan = self.moveit.plan_ee_pos(goal_arm)
+#         # self.moveit.move_through_waypoints(plan)
+# #goal_world.pose.orientation = q
+
+# goal_world.pose.position.x=0.217083305719
+# goal_world.pose.position.y=-0.747633460875
+# goal_world.pose.position.z=0.404914454574
+
+# goal_world.pose.orientation.x=0.649025440216
+# goal_world.pose.orientation.y=-0.380357697457
+# goal_world.pose.orientation.z=-0.431538341116
+# goal_world.pose.orientation.w=0.505656661579
+
+# #print(goal_world)
+# #tf_listener.waitForTransform(arm_frame, eef_frame, rospy.Time(), rospy.Duration(4.0))
+# #goal_world = tf_listener.transformPose(eef_frame, goal_world)
+
+# #goal_world.pose.position.z+=.2
+# #print(goal_world)
+
+# arm = ArmMoveIt("j2s7s300_link_base")
+# arm.move_to_ee_pose(goal_world.pose)
+# print(arm.get_FK())

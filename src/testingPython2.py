@@ -251,17 +251,17 @@ cordinates = cordinates[outliers]
 # # print(bbox_coords)
 # print(cordinates[:,0])
 
-for cor in cordinates:
-    #canvas = cv2.circle(color_img, (cor[1], cor[0]), 1, (0,0,255), -1)
-    canvas = cv2.circle(original_img, (cor[1], cor[0]), 1, (0,0,255), -1)
-    cv2.imshow('canvas', canvas)
-    cv2.waitKey(5)
+# for cor in cordinates:
+#     #canvas = cv2.circle(color_img, (cor[1], cor[0]), 1, (0,0,255), -1)
+#     canvas = cv2.circle(original_img, (cor[1], cor[0]), 1, (0,0,255), -1)
+#     cv2.imshow('canvas', canvas)
+#     cv2.waitKey(5)
 
 depth_arr = np.array(img2, dtype=np.float32)
 tf_listener = tf.TransformListener()
 tf_listener.waitForTransform(arm_frame, aligned_frame, rospy.Time(), rospy.Duration(4.0))
 for cor in cordinates:
-    p = rs2.rs2_deproject_pixel_to_point(camera_intrinsics, [cor[0], cor[1]], depth_arr[cor[1],cor[0]]/1000.0)
+    p = rs2.rs2_deproject_pixel_to_point(camera_intrinsics, [cor[0], cor[1]], depth_arr[cor[1],cor[0]])
     p = [entry / 1000.0 for entry in p]
     poi = PoseStamped()
     poi.pose.position.x = p[0]
@@ -270,8 +270,12 @@ for cor in cordinates:
     poi.pose.orientation = Quaternion(0.,0.,0.,1.)
     poi.header.frame_id = aligned_frame
 
-    goal_world = tf_listener.transformPose(arm_frame, poi)
-    print(goal_world)
+    if p[2] == 0:
+        print("OOOOO NOOOOOO")
+    else:
+        goal_world = tf_listener.transformPose(arm_frame, poi)
+        print(goal_world)
+
 
 print("DEPTH:", img2[cordinates[19][1],cordinates[19][0]])
 p = rs2.rs2_deproject_pixel_to_point(camera_intrinsics, [cordinates[19][0], cordinates[19][1]], img2[cordinates[19][1],cordinates[19][0]])
@@ -326,7 +330,7 @@ tf_listener = tf.TransformListener()
 # # q.w = 1.0#rot[3]
 
 # print(poi)
-tf_listener.waitForTransform(arm_frame, camera_frame, rospy.Time(), rospy.Duration(4.0))
+tf_listener.waitForTransform(arm_frame, aligned_frame, rospy.Time(), rospy.Duration(4.0))
 goal_world = tf_listener.transformPose(arm_frame, poi)
 # the x-y is correct but there is still a z problem
 
@@ -337,13 +341,14 @@ goal_world = tf_listener.transformPose(arm_frame, poi)
 
 # goal_world.pose.position.x=0.217083305719
 # goal_world.pose.position.y=-0.747633460875
-# goal_world.pose.position.z=0.408275365829
+goal_world.pose.position.z=0.008275365829
 
 
-# goal_world.pose.orientation.x=0.474602401257
-# goal_world.pose.orientation.y=0.599907696247
-# goal_world.pose.orientation.z=-0.337281763554
-# goal_world.pose.orientation.w=0.548729717731
+
+goal_world.pose.orientation.x=0.474602401257
+goal_world.pose.orientation.y=0.599907696247
+goal_world.pose.orientation.z=-0.337281763554
+goal_world.pose.orientation.w=0.548729717731
 
 print(goal_world)
 #tf_listener.waitForTransform(arm_frame, eef_frame, rospy.Time(), rospy.Duration(4.0))
@@ -352,8 +357,7 @@ print(goal_world)
 #goal_world.pose.position.z+=.2
 # print(goal_world)
 
-# arm = ArmMoveIt()
-# print(tf_listener.transformPose(eef_frame, goal_world))
+arm = ArmMoveIt("/j2s7s300_link_base")
 
-#arm.move_to_ee_pose(goal_world.pose)
+arm.move_to_ee_pose(goal_world.pose)
 #print(arm.get_IK(goal_world.pose))

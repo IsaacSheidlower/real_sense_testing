@@ -14,9 +14,10 @@ from hlpr_manipulation_utils.arm_moveit2 import ArmMoveIt
 
 depth_image_topic = "/camera/depth/image_rect_raw"
 depth_info_topic = "/camera/depth/camera_info"
-world_frame = "base_link"
-depth_frame = "camera_depth_frame"
+world_frame = "/base_link"
+depth_frame = "/camera_depth_frame"
 camera_frame = "/camera_color_optical_frame"
+aligned_frame = "camera_aligned_depth_to_color_frame"
 arm_frame = "/j2s7s300_link_base"
 eef_frame = "/j2s7s300_ee_link"
 
@@ -63,8 +64,8 @@ print("camera:" , img.shape)
 print("depth: ", img2.shape)
 def process(img):
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(img_gray, 210, 255, cv2.THRESH_BINARY)
-    img_canny = cv2.Canny(thresh, 0, 0)
+    _, thresh = cv2.threshold(img_gray, 200, 255, cv2.THRESH_BINARY)
+    img_canny = cv2.Canny(thresh, 50, 0)
     img_dilate = cv2.dilate(img_canny, None, iterations=7)
     return cv2.erode(img_dilate, None, iterations=7)
 
@@ -75,10 +76,10 @@ def get_contours(img):
 
     #cv2.rectangle(img, (x, y), (x + w, y + h), (0, 0, 255), 2)
 
-    y = y+15
-    x = x+15
-    w = w-40
-    h = h-40
+    y = y+20
+    x = x+20
+    w = w-50
+    h = h-50
     new_img = img[y:y+h,x:x+w]
     return new_img, x, y, w, h
 
@@ -87,7 +88,7 @@ rect_img, x_shift,y_shift,w_shift,h_shift = get_contours(img)
 
 
 original_img = img.copy()
-# cv2.imshow('img', original_img[x_shift:y_shift+h_shift,x_shift:x_shift+w_shift])
+#cv2.imshow('img', original_img[x_shift:y_shift+h_shift,x_shift:x_shift+w_shift])
 # cv2.imshow("img_processed", rect_img)
 # cv2.waitKey(0)
 
@@ -109,7 +110,7 @@ edges = cv2.Canny(inputImage,150,200,apertureSize = 3)
 print(edges.shape)
 minLineLength = 30
 maxLineGap = 5
-lines = cv2.HoughLinesP(edges,cv2.HOUGH_PROBABILISTIC, np.pi/180, 30, minLineLength,maxLineGap)
+lines = cv2.HoughLinesP(edges,cv2.HOUGH_PROBABILISTIC, np.pi/180, 60, minLineLength,maxLineGap)
 for o in range(0, len(lines)):
     for x1,y1,x2,y2 in lines[o]:
         #cv2.line(inputImage,(x1,y1),(x2,y2),(0,128,0),2, cv2.LINE_AA)
@@ -119,7 +120,7 @@ for o in range(0, len(lines)):
 print(inputImage.shape)
 font = cv2.FONT_HERSHEY_SIMPLEX
 # cv2.putText(inputImage,"Tracks Detected", (500, 250), font, 0.5, 255)
-# cv2.imshow("Trolley_Problem_Result", inputImage)
+#cv2.imshow("Trolley_Problem_Result", inputImage)
 # cv2.imshow('edge', edges)
 
 # cv2.waitKey(0)
@@ -250,32 +251,33 @@ cordinates = cordinates[outliers]
 # # print(bbox_coords)
 # print(cordinates[:,0])
 
-# for cor in cordinates:
-#     #canvas = cv2.circle(color_img, (cor[1], cor[0]), 1, (0,0,255), -1)
-#     canvas = cv2.circle(original_img, (cor[1], cor[0]), 1, (0,0,255), -1)
-#     cv2.imshow('canvas', canvas)
-#     cv2.waitKey(5)
+for cor in cordinates:
+    #canvas = cv2.circle(color_img, (cor[1], cor[0]), 1, (0,0,255), -1)
+    canvas = cv2.circle(original_img, (cor[1], cor[0]), 1, (0,0,255), -1)
+    cv2.imshow('canvas', canvas)
+    cv2.waitKey(5)
 
 depth_arr = np.array(img2, dtype=np.float32)
 tf_listener = tf.TransformListener()
-tf_listener.waitForTransform(arm_frame, camera_frame, rospy.Time(), rospy.Duration(4.0))
+tf_listener.waitForTransform(arm_frame, aligned_frame, rospy.Time(), rospy.Duration(4.0))
 for cor in cordinates:
-    p = rs2.rs2_deproject_pixel_to_point(camera_intrinsics, [cor[0], cor[1]], depth_arr[cor[1],cor[0]])
+    p = rs2.rs2_deproject_pixel_to_point(camera_intrinsics, [cor[0], cor[1]], depth_arr[cor[1],cor[0]]/1000.0)
     p = [entry / 1000.0 for entry in p]
     poi = PoseStamped()
     poi.pose.position.x = p[0]
     poi.pose.position.y = p[1]
     poi.pose.position.z = p[2]
     poi.pose.orientation = Quaternion(0.,0.,0.,1.)
-    poi.header.frame_id = camera_frame
-
+    poi.header.frame_id = aligned_frame
 
     goal_world = tf_listener.transformPose(arm_frame, poi)
     print(goal_world)
-#p = rs2.rs2_deproject_pixel_to_point(camera_intrinsics, [cordinates[10][0], cordinates[10][1]], img2[cordinates[10][1],cordinates[10][0]])
+
+print("DEPTH:", img2[cordinates[19][1],cordinates[19][0]])
+p = rs2.rs2_deproject_pixel_to_point(camera_intrinsics, [cordinates[19][0], cordinates[19][1]], img2[cordinates[19][1],cordinates[19][0]])
 
 
-#p = Point(cordinates[50][0]/1000.0, cordinates[50][1]/1000.0, img2[cordinates[50][1],cordinates[50][0]]/1000.0)
+#p = Point(cordinates[50][0], cordinates[50][1], img2[cordinates[50][1],cordinates[50][0]])
 
 p = [entry / 1000.0 for entry in p]
 print("POINT, ", p)
@@ -285,8 +287,7 @@ poi.pose.position.x = p[0]
 poi.pose.position.y = p[1]
 poi.pose.position.z = p[2]
 poi.pose.orientation = Quaternion(0.,0.,0.,1.)
-poi.header.frame_id = camera_frame
-
+poi.header.frame_id = aligned_frame
 tf_listener = tf.TransformListener()
 """
     x: 0.650393009186
